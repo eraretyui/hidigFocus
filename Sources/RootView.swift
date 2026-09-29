@@ -1,0 +1,345 @@
+import SwiftUI
+
+struct RootView: View {
+    @Environment(\.hidigPaletteIdentity) private var paletteIdentity
+    @EnvironmentObject private var store: AppStore
+    @AppStorage(HidigSettingsKeys.appearance) private var appearanceRaw = AppearancePreference.system.rawValue
+    @AppStorage(HidigSettingsKeys.sidebarColor) private var sidebarColorRaw = SidebarColorPreference.ocean.rawValue
+    @AppStorage(HidigSettingsKeys.customSidebarColor) private var customSidebarColorHex = "#E5EFDA"
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showsDisableProtection = false
+    @AppStorage("navigationCollapsed") private var navigationCollapsed = true
+    @AppStorage("navigationWidth") private var navigationWidth = 240.0
+    @GestureState private var navigationDragX: CGFloat = 0
+
+    private var resolvedNavigationWidth: Double {
+        min(320, max(224, navigationWidth))
+    }
+
+    private var displayedNavigationWidth: CGFloat {
+        let collapsedWidth: CGFloat = 64
+        let expandedWidth = CGFloat(resolvedNavigationWidth)
+        let base = navigationCollapsed ? collapsedWidth : expandedWidth
+        let directionalDrag = navigationCollapsed ? max(0, navigationDragX) : min(0, navigationDragX)
+        return min(expandedWidth, max(collapsedWidth, base + directionalDrag))
+    }
+
+    private var sidebarIsCompact: Bool {
+        displayedNavigationWidth < 148
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Sidebar(
+                showsDisableProtection: $showsDisableProtection,
+                isCollapsed: sidebarIsCompact,
+                backgroundColor: HidigPalette.sidebar,
+                foregroundColor: HidigPalette.forest
+            )
+                .frame(width: displayedNavigationWidth)
+            if !navigationCollapsed && navigationDragX == 0 {
+                PanelResizeHandle(width: $navigationWidth, bounds: 224...320)
+            }
+
+            sectionView(store.selectedSection)
+            .transition(.opacity)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: store.selectedSection)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(HidigPalette.canvas)
+        }
+        .contentShape(Rectangle())
+        .simultaneousGesture(navigationGesture)
+        .animation(reduceMotion ? nil : .interactiveSpring(response: 0.32, dampingFraction: 0.92), value: navigationCollapsed)
+        .ignoresSafeArea()
+        .sheet(isPresented: $showsDisableProtection) {
+            DisableProtectionSheet(isPresented: $showsDisableProtection)
+                .environmentObject(store)
+        }
+        .sheet(item: $store.pendingProtectedResourceChange) { change in
+            ProtectedResourceChangeSheet(change: change).environmentObject(store)
+        }
+        .alert(
+            "hidigFocus",
+            isPresented: Binding(
+                get: { store.errorMessage != nil },
+                set: { if !$0 { store.errorMessage = nil } }
+            )
+        ) {
+            Button("Закрыть", role: .cancel) { store.errorMessage = nil }
+        } message: {
+            Text(store.errorMessage ?? "")
+        }
+        .tint(HidigPalette.forest)
+        .foregroundStyle(HidigPalette.forest)
+        .preferredColorScheme(AppearancePreference(rawValue: appearanceRaw)?.colorScheme)
+        .onChange(of: appearanceRaw) { value in
+            AppAppearanceController.apply(AppearancePreference(rawValue: value) ?? .system)
+        }
+        .onAppear {
+            navigationWidth = resolvedNavigationWidth
+        }
+    }
+
+    @ViewBuilder private func sectionView(_ section: AppSection) -> some View {
+        switch section {
+        case .today: TodayView()
+        case .tasks, .calendar: TasksView()
+        case .pomodoro: FocusView()
+        case .groups: GroupsView()
+        case .habits: HabitsView()
+        case .statistics: StatisticsView()
+        case .tickTick: TickTickView()
+        case .journal: JournalView()
+        case .settings: SettingsView()
+        }
+    }
+
+    private var navigationGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .updating($navigationDragX) { value, state, _ in
+                let boundary = navigationCollapsed ? 92 : CGFloat(resolvedNavigationWidth) + 18
+                guard value.startLocation.x <= boundary,
+                      abs(value.translation.width) > abs(value.translation.height) * 1.15 else { return }
+                state = value.translation.width
+            }
+            .onEnded { value in
+                let boundary = navigationCollapsed ? 92 : CGFloat(resolvedNavigationWidth) + 18
+                guard value.startLocation.x <= boundary,
+                      abs(value.translation.width) > abs(value.translation.height) * 1.15 else { return }
+                let projected = value.predictedEndTranslation.width
+                if navigationCollapsed, projected > 48 {
+                    navigationCollapsed = false
+                } else if !navigationCollapsed, projected < -48 {
+                    navigationCollapsed = true
+                }
+            }
+    }
+
+}
+
+private struct Sidebar: View {
+    @Environment(\.hidigPaletteIdentity) private var paletteIdentity
+    @EnvironmentObject private var store: AppStore
+    @Binding var showsDisableProtection: Bool
+    let isCollapsed: Bool
+    let backgroundColor: Color
+    let foregroundColor: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 11) {
+                AppIconPreview(style: .green, size: 38)
+                if !isCollapsed { VStack(alignment: .leading, spacing: 1) {
+                    Text("hidigFocus")
+                        .hidigFont(size: 17, weight: .semibold, design: .rounded)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("focus gate")
+                        .hidigFont(size: 10, weight: .medium, design: .rounded)
+                        .tracking(1)
+                        .foregroundStyle(foregroundColor.opacity(0.68))
+                }
+                .layoutPriority(1)
+                .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
+            }
+            .padding(.top, 48)
+            .padding(.horizontal, isCollapsed ? 13 : 20)
+
+            VStack(spacing: 5) {
+                ForEach(AppSection.allCases) { section in
+                    SidebarButton(section: section, foregroundColor: foregroundColor, isCollapsed: isCollapsed)
+                }
+            }
+            .padding(.horizontal, isCollapsed ? 8 : 12)
+            .padding(.top, isCollapsed ? 52 : 22)
+
+            Spacer()
+
+            if isCollapsed {
+                Button {
+                    if store.protectionEnabled { showsDisableProtection = true }
+                    else { store.setProtectionEnabled(true) }
+                } label: {
+                    Image(systemName: store.protectionEnabled ? "lock.shield.fill" : "lock.open")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }.buttonStyle(.plain)
+                    .help(store.protectionEnabled ? "Защита включена" : "Включить защиту")
+                    .padding(.bottom, 14)
+            } else { VStack(alignment: .leading, spacing: 11) {
+                HStack(spacing: 8) {
+                    StatusDot(isActive: store.protectionEnabled)
+                    Text(store.protectionEnabled ? "Защита включена" : "Защита выключена")
+                        .hidigFont(size: 12, weight: .semibold)
+                }
+                Text(store.protectionEnabled
+                     ? "Закрытые группы откроются после выполнения назначенных задач."
+                     : "Сайты и приложения сейчас доступны.")
+                    .hidigFont(size: 11)
+                    .foregroundStyle(foregroundColor.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(store.protectionEnabled ? "Отключить защиту" : "Включить защиту") {
+                    if store.protectionEnabled {
+                        showsDisableProtection = true
+                    } else {
+                        store.setProtectionEnabled(true)
+                    }
+                }
+                .buttonStyle(SecondaryButtonStyle())
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.13))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(14)
+            .padding(.bottom, 8)
+            }
+        }
+        .foregroundStyle(foregroundColor)
+        .background(backgroundColor)
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(HidigPalette.line).frame(width: 1)
+        }
+        .animation(.interactiveSpring(response: 0.38, dampingFraction: 0.88), value: isCollapsed)
+    }
+}
+
+private struct SidebarButton: View {
+    @Environment(\.hidigPaletteIdentity) private var paletteIdentity
+    @EnvironmentObject private var store: AppStore
+    let section: AppSection
+    let foregroundColor: Color
+    let isCollapsed: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            // Both destinations share one planner; changing them must not animate its layout.
+            var transaction = Transaction()
+            transaction.disablesAnimations = section == .tasks || section == .calendar
+            withTransaction(transaction) {
+                if section == .tasks { store.planner.presentation = .list }
+                if section == .calendar { store.planner.presentation = .calendar }
+                store.selectedSection = section
+            }
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: section.systemImage).frame(width: 18)
+                if !isCollapsed {
+                    Text(section.title)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
+                    Spacer()
+                }
+            }
+            .contentShape(Rectangle())
+            .hidigFont(size: 13, weight: store.selectedSection == section ? .semibold : .regular)
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(background)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .help(section.title)
+        .accessibilityLabel(section.title)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.16), value: isHovered)
+        .animation(.easeInOut(duration: 0.2), value: store.selectedSection)
+    }
+
+    private var background: Color {
+        if store.selectedSection == section { return Color.white.opacity(0.2) }
+        return isHovered ? Color.white.opacity(0.12) : .clear
+    }
+}
+
+struct PanelResizeHandle: View {
+    @Binding var width: Double
+    var bounds: ClosedRange<Double>
+    @State private var initialWidth: Double?
+    var body: some View {
+        Rectangle().fill(HidigPalette.line.opacity(0.5)).frame(width: 5)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 1).onChanged { value in
+                if initialWidth == nil { initialWidth = width }
+                width = min(bounds.upperBound, max(bounds.lowerBound, (initialWidth ?? width) + value.translation.width))
+            }.onEnded { _ in initialWidth = nil })
+            .onHover { inside in (inside ? NSCursor.resizeLeftRight : NSCursor.arrow).set() }
+            .onDisappear { NSCursor.arrow.set() }
+            .accessibilityLabel("Изменить ширину панели")
+    }
+}
+
+private struct ProtectedResourceChangeSheet: View {
+    @EnvironmentObject private var store: AppStore
+    let change: ProtectedResourceChange
+    @State private var confirmation = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SectionEyebrow(text: "Необратимое действие")
+            Text(change.title).hidigFont(size: 28, weight: .bold, design: .rounded)
+            Text("Серия защиты — \(store.disciplineStreak) дней — и текущие серии привычек обнулятся. Защита останется включённой, привычки и история отметок сохранятся.")
+                .foregroundStyle(HidigPalette.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("Введите ПОДТВЕРДИТЬ").hidigFont(size: 12, weight: .semibold)
+            TextField("ПОДТВЕРДИТЬ", text: $confirmation).textFieldStyle(HidigTextFieldStyle())
+            HStack {
+                Button("Отмена") { store.pendingProtectedResourceChange = nil }.buttonStyle(SecondaryButtonStyle())
+                Spacer()
+                Button("Обнулить серии и подтвердить") {
+                    do { _ = try store.confirmProtectedResourceChange(confirmation) }
+                    catch { store.errorMessage = error.localizedDescription }
+                }.buttonStyle(PrimaryButtonStyle()).disabled(confirmation != "ПОДТВЕРДИТЬ")
+            }
+        }.padding(30).frame(width: 480).foregroundStyle(HidigPalette.forest).background(HidigPalette.canvas)
+    }
+}
+
+private struct DisableProtectionSheet: View {
+    @Environment(\.hidigPaletteIdentity) private var paletteIdentity
+    @EnvironmentObject private var store: AppStore
+    @Binding var isPresented: Bool
+    @State private var confirmation = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SectionEyebrow(text: "Необратимое действие")
+            Text("Отключить защиту?")
+                .hidigFont(size: 28, weight: .bold, design: .rounded)
+                .foregroundStyle(HidigPalette.forest)
+            Text(disableWarning)
+                .foregroundStyle(HidigPalette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Введите ОТКЛЮЧИТЬ")
+                .hidigFont(size: 12, weight: .semibold)
+            TextField("ОТКЛЮЧИТЬ", text: $confirmation)
+                .textFieldStyle(HidigTextFieldStyle())
+            HStack {
+                Button("Отмена") { isPresented = false }
+                    .buttonStyle(SecondaryButtonStyle())
+                Spacer()
+                Button("Обнулить серии и отключить") {
+                    store.disableProtection()
+                    isPresented = false
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(confirmation != "ОТКЛЮЧИТЬ")
+            }
+        }
+        .padding(30)
+        .frame(width: 480)
+        .background(HidigPalette.canvas)
+    }
+
+    private var disableWarning: String {
+        let streak = RussianPluralizer.phrase(
+            store.disciplineStreak,
+            one: "день",
+            few: "дня",
+            many: "дней"
+        )
+        return "Ваша серия — \(streak) без отключения защиты — будет потеряна. Группы откроются, а текущие серии всех привычек обнулятся. Сами привычки и история отметок сохранятся."
+    }
+}
