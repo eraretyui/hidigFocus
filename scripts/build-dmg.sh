@@ -12,7 +12,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [ ! -d "$APP" ]; then
-    echo "Сначала выполните ./scripts/build-app.sh" >&2
+    echo "Сначала выполните bash ./scripts/build-app.sh" >&2
     exit 2
 fi
 

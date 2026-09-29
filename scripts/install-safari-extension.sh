@@ -7,7 +7,7 @@ TARGET_APP="/Applications/hidigFocus Safari.app"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 if [ ! -d "$SOURCE_APP" ]; then
-    echo "Сначала выполните ./scripts/build-safari-extension.sh" >&2
+    echo "Сначала выполните bash ./scripts/build-safari-extension.sh" >&2
     exit 2
 fi
 
