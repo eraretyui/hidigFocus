@@ -66,7 +66,7 @@
 ```bash
 git clone https://github.com/eraretyui/hidigFocus.git
 cd hidigFocus
-./scripts/build-app.sh
+bash ./scripts/build-app.sh
 open dist/hidigFocus.app
 ```
 
@@ -75,13 +75,13 @@ open dist/hidigFocus.app
 Для создания установочного образа с ярлыком папки «Программы»:
 
 ```bash
-./scripts/build-dmg.sh
+bash ./scripts/build-dmg.sh
 ```
 
 По умолчанию используется надёжная debug-сборка. После установки полного Xcode release-вариант собирается так:
 
 ```bash
-HIDIGFOCUS_BUILD_CONFIGURATION=release ./scripts/build-app.sh
+HIDIGFOCUS_BUILD_CONFIGURATION=release bash ./scripts/build-app.sh
 ```
 
 ## Блокировка сайтов
@@ -103,7 +103,7 @@ HIDIGFOCUS_BUILD_CONFIGURATION=release ./scripts/build-app.sh
 Для создания устанавливаемого Safari-расширения нужен полный Xcode. После установки один раз откройте Xcode и примите лицензию, затем:
 
 ```bash
-./scripts/build-safari-extension.sh
+bash ./scripts/build-safari-extension.sh
 ```
 
 Скрипт создаст Xcode-проект через официальную утилиту Apple, соберёт приложение и сформирует архив. Запустите `hidigFocus Safari.app`, затем включите расширение в `Safari → Настройки → Расширения`.
@@ -111,7 +111,7 @@ HIDIGFOCUS_BUILD_CONFIGURATION=release ./scripts/build-app.sh
 Чтобы установить собранный модуль в папку «Программы» и зарегистрировать расширение:
 
 ```bash
-./scripts/install-safari-extension.sh
+bash ./scripts/install-safari-extension.sh
 ```
 
 ## Технические границы текущей версии
