@@ -43,7 +43,7 @@
 78 XCTest-проверок, 0 ошибок, 1 тест реального импорта пропущен. Покрыты миграция, очередь записи, независимый дедлайн, повторения, отмена/повтор, напоминания, поиск, импорт, прежний etag, каскад подзадач и применение правил группы.
 
 Команда: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --disable-sandbox -j 2`.
-Сборка: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/build-app.sh`.
+Сборка: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer bash ./scripts/build-app.sh`.
 
 ### Вычисления на синтетических данных
 
